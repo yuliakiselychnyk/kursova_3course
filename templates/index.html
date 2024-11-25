@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Air Route Map</title>
+    <link rel="stylesheet" href="https://openlayers.org/en/v6.5.0/css/ol.css" type="text/css">
+    <script src="https://openlayers.org/en/v6.5.0/build/ol.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        body {
+            background-color: #e6f7ff;
+        }
+        #map {
+            width: 100%;
+            height: 600px;
+            border: 2px solid #007bff;
+            border-radius: 8px;
+        }
+        .sidebar {
+            padding: 20px;
+            background-color: #f0faff;
+            border-right: 1px solid #e0e0e0;
+            height: 100vh;
+            overflow-y: auto;
+        }
+        .waypoint-list {
+            list-style-type: none;
+            padding-left: 0;
+        }
+        .waypoint-item {
+            background-color: #ffffff;
+            padding: 10px;
+            margin-bottom: 5px;
+            border-radius: 4px;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+        }
+        .route-info {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e3f2fd;
+            border-radius: 8px;
+        }
+        .map-point {
+            color: #FF4500;
+            font-size: 1.5em;
+        }
+        .btn-primary {
+            background-color: #007bff;
+            border-color: #007bff;
+        }
+        .start-point, .end-point {
+            border-radius: 50%;
+            padding: 5px;
+        }
+        .start-point {
+            background-color: #00008B;
+            color: #ffffff;
+        }
+        .end-point {
+            background-color: #00BFFF;
+            color: #ffffff;
+        }
+        .waypoint {
+            width: 8px;
+            height: 8px;
+            background-color: #4682B4;
+            border-radius: 50%;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-md-3 sidebar">
+                <h2 class="text-primary">Найкоротший шлях між аеропортами</h2>
+                <form id="route-form">
+                    <div class="form-group">
+                        <label for="source-icao">Початковий аеропорт (ICAO):</label>
+                        <input type="text" id="source-icao" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="target-icao">Кінцевий аеропорт (ICAO):</label>
+                        <input type="text" id="target-icao" class="form-control" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Знайти шлях</button>
+                </form>
+                <div class="route-info" id="route-info">
+                    <!-- Інформація про маршрут -->
+                </div>
+            </div>
+            <div class="col-md-9">
+                <div id="map"></div>
+                <div class="route-info mt-3" id="legend">
+                    <p>Початкова точка - <span class="start-point"></span>, кінцева точка - <span class="end-point"></span></p>
+                    <div id="coordinates"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Створення карти OpenLayers
+        var map = new ol.Map({
+            target: 'map',
+            layers: [
+                new ol.layer.Tile({
+                    source: new ol.source.OSM()
+                })
+            ],
+            view: new ol.View({
+                center: ol.proj.fromLonLat([30.5, 50.5]), // Координати центру карти
+                zoom: 5
+            })
+        });
+
+        // Функція для отримання найкоротшого шляху через API
+        function getShortestPath(source, target) {
+            fetch('/api/shortest_path', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    source_icao: source,
+                    target_icao: target
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    console.error('Error:', data.error);
+                } else {
+                    console.log('Шлях:', data.path);
+                    drawPathOnMap(data.path);
+                    displayRouteInfo(data.path, data.cost);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+        }
+
+        // Функція для малювання шляху на карті
+        function drawPathOnMap(path) {
+            var coordinates = [];
+
+            // Отримуємо координати для кожної вершини у шляху
+            path.forEach(function(ident, index) {
+                // Запит до API для отримання координат вершини
+                fetch(`/api/vertices?ident=${ident}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        console.error('Error:', data.error);
+                    } else {
+                        var coordinate = ol.proj.fromLonLat([data.longitude, data.latitude]);
+                        coordinates.push(coordinate);
+
+                        // Додати маленький маркер для проміжних точок
+                        if (index !== 0 && index !== path.length - 1) {
+                            var waypointFeature = new ol.Feature({
+                                geometry: new ol.geom.Point(coordinate)
+                            });
+                            waypointFeature.setStyle(new ol.style.Style({
+                                image: new ol.style.Circle({
+                                    radius: 4,
+                                    fill: new ol.style.Fill({
+                                        color: '#4682B4'
+                                    })
+                                })
+                            }));
+                            var waypointLayer = new ol.layer.Vector({
+                                source: new ol.source.Vector({
+                                    features: [waypointFeature]
+                                })
+                            });
+                            map.addLayer(waypointLayer);
+                        }
+
+                        if (coordinates.length === path.length) {
+                            // Додаємо маршрут на карту, коли всі координати отримані
+                            var routeFeature = new ol.Feature({
+                                geometry: new ol.geom.LineString(coordinates)
+                            });
+
+                            var routeLayer = new ol.layer.Vector({
+                                source: new ol.source.Vector({
+                                    features: [routeFeature]
+                                }),
+                                style: new ol.style.Style({
+                                    stroke: new ol.style.Stroke({
+                                        width: 3,
+                                        color: '#0000FF' // Голуба лінія
+                                    })
+                                })
+                            });
+
+                            map.addLayer(routeLayer);
+
+                            // Початкова і кінцева точки
+                            var startFeature = new ol.Feature({
+                                geometry: new ol.geom.Point(coordinates[0])
+                            });
+                            startFeature.setStyle(new ol.style.Style({
+                                image: new ol.style.Circle({
+                                    radius: 5,
+                                    fill: new ol.style.Fill({
+                                        color: '#00008B'
+                                    })
+                                })
+                            }));
+
+                            var endFeature = new ol.Feature({
+                                geometry: new ol.geom.Point(coordinates[coordinates.length - 1])
+                            });
+                            endFeature.setStyle(new ol.style.Style({
+                                image: new ol.style.Circle({
+                                    radius: 5,
+                                    fill: new ol.style.Fill({
+                                        color: '#00BFFF'
+                                    })
+                                })
+                            }));
+
+                            var pointsLayer = new ol.layer.Vector({
+                                source: new ol.source.Vector({
+                                    features: [startFeature, endFeature]
+                                })
+                            });
+                            map.addLayer(pointsLayer);
+
+                            // Відображення координат початкової і кінцевої точки
+                            displayCoordinates(path, coordinates);
+                        }
+                    }
+                });
+            });
+        }
+
+        // Функція для відображення інформації про маршрут
+        function displayRouteInfo(path, distance) {
+            var routeInfo = document.getElementById('route-info');
+            routeInfo.innerHTML = `
+                <h4>Інформація про маршрут</h4>
+                <p>Відстань маршруту: ${distance} км</p>
+                <p>Проміжні аеропорти:</p>
+                <ul class="waypoint-list">
+                    ${path.map(waypoint => `<li class="waypoint-item">${waypoint}</li>`).join('')}
+                </ul>
+            `;
+        }
+
+        // Функція для відображення координат початкової і кінцевої точки
+        function displayCoordinates(path, coordinates) {
+            var coordinatesInfo = document.getElementById('coordinates');
+            coordinatesInfo.innerHTML = `
+                <h5>Координати:</h5>
+                <p>Початкова точка (${path[0]}): [${coordinates[0][0].toFixed(6)}, ${coordinates[0][1].toFixed(6)}]</p>
+                <p>Кінцева точка (${path[path.length - 1]}): [${coordinates[coordinates.length - 1][0].toFixed(6)}, ${coordinates[coordinates.length - 1][1].toFixed(6)}]</p>
+            `;
+        }
+
+        // Обробка події форми для пошуку шляху
+        document.getElementById('route-form').addEventListener('submit', function(event) {
+            event.preventDefault();
+            var source = document.getElementById('source-icao').value;
+            var target = document.getElementById('target-icao').value;
+            getShortestPath(source, target);
+        });
+    </script>
+</body>
+</html>

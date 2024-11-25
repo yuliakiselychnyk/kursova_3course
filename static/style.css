@@ -1,0 +1,54 @@
+/* Загальний стиль для веб-додатку */
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f8f9fa;
+    margin: 0;
+    padding: 0;
+}
+
+.sidebar {
+    padding: 20px;
+    background-color: #f8f9fa;
+    border-right: 1px solid #e0e0e0;
+    height: 100vh;
+    overflow-y: auto;
+}
+
+.waypoint-list {
+    list-style-type: none;
+    padding-left: 0;
+}
+
+.waypoint-item {
+    background-color: #ffffff;
+    padding: 10px;
+    margin-bottom: 5px;
+    border-radius: 4px;
+    box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+}
+
+.route-info {
+    margin-top: 20px;
+    padding: 15px;
+    background-color: #f0f8ff;
+    border-radius: 8px;
+}
+
+.btn-primary {
+    background-color: #007bff;
+    border: none;
+}
+
+.btn-primary:hover {
+    background-color: #0056b3;
+}
+
+#map {
+    width: 100%;
+    height: 600px;
+}
+
+.map-point {
+    color: #FF4500;
+    font-size: 1.5em;
+}
